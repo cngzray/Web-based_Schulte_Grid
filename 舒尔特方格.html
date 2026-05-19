@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>舒尔特方格</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #f8f9fa;
+            gap: 20px;
+            padding: 20px;
+        }
+        .matrix {
+            display: grid;
+            grid-template-columns: repeat(5, 80px);
+            grid-template-rows: repeat(5, 80px);
+            gap: 8px;
+        }
+        .cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 32px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .cell:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        /* 标题字号增大一倍 */
+        h2 {
+            color: #333;
+            font-size: 48px; /* 原来24px → 现在48px，增大一倍 */
+            font-weight: bold;
+        }
+        /* 计时器 + 按钮 容器 */
+        .timer-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .timer {
+            font-size: 36px;
+            font-weight: bold;
+            color: #e74c3c;
+            background: #fff;
+            padding: 12px 30px;
+            border-radius: 12px;
+            border: 2px solid #ddd;
+            min-width: 180px;
+            text-align: center;
+        }
+        /* 按钮样式 */
+        #toggleBtn {
+            font-size: 24px;
+            font-weight: bold;
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: none;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #toggleBtn:hover {
+            background: #2980b9;
+        }
+        #toggleBtn.stop {
+            background: #e74c3c;
+        }
+        #toggleBtn.stop:hover {
+            background: #c0392b;
+        }
+        /* 底部说明文字样式：小字体、灰色、居中、最大宽度限制 */
+        .description {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            text-align: center;
+            max-width: 700px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h2>舒尔特方格</h2>
+    <div class="matrix" id="matrix"></div>
+
+    <!-- 计时器 + 按钮 -->
+    <div class="timer-container">
+        <div class="timer" id="timer">0.0</div>
+        <button id="toggleBtn">开始</button>
+    </div>
+
+    <!-- 底部说明文字 -->
+    <div class="description">
+        舒尔特方格为经典专注力训练与检测工具，方格内随机无序排布数字 1—25。测试需按从小到大顺序，依次快速找出全部数字，手指点指或目光定位均可，全程保持专注、不跳数、不回看。以完整读完 1 至 25 的用时作为评判标准，用时越短，代表视觉专注力、注意力集中度、视觉反应速度与抗干扰能力越强；耗时过长、频繁卡顿、找数混乱，则说明注意力容易分散，视觉追踪与专注稳定性较弱。<br>
+        优秀：35 秒以内<br>
+        良好：35～45 秒<br>
+        合格：45～60 秒<br>
+        偏弱：60 秒以上
+    </div>
+
+    <script>
+        // 1. 生成 1~25 有序数组
+        let numbers = Array.from({ length: 25 }, (_, i) => i + 1);
+
+        // 2. 为每个数字准备专属颜色
+        const colorList = [
+            '#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#2ecc71',
+            '#27ae60', '#1abc9c', '#16a085', '#3498db', '#2980b9',
+            '#9b59b6', '#8e44ad', '#34495e', '#2c3e50', '#7f8c8d',
+            '#95a5a6', '#c0392b', '#d35400', '#17a2b8', '#6f42c1',
+            '#e83e8c', '#20c997', '#fd7e14', '#0dcaf0', '#6610f2'
+        ];
+
+        // 3. 洗牌算法乱序
+        function shuffle(arr) {
+            let array = [...arr];
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        let matrix = document.getElementById('matrix');
+
+        // 封装：渲染矩阵函数
+        function renderMatrix() {
+            // 清空旧矩阵
+            matrix.innerHTML = '';
+            // 重新洗牌
+            let shuffledNumbers = shuffle(numbers);
+            // 渲染新矩阵
+            shuffledNumbers.forEach((num) => {
+                let cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.textContent = num;
+                cell.style.color = colorList[num - 1];
+                matrix.appendChild(cell);
+            });
+        }
+
+        // 首次加载渲染
+        renderMatrix();
+
+        // ===================== 计时器 + 开始/停止功能 =====================
+        let timerElement = document.getElementById('timer');
+        let toggleBtn = document.getElementById('toggleBtn');
+        
+        let isRunning = false;
+        let startTime = 0;
+        let animationId = null;
+
+        // 更新计时器显示
+        function updateTimer() {
+            if (!isRunning) return;
+            const elapsed = (Date.now() - startTime) / 1000;
+            timerElement.textContent = elapsed.toFixed(1);
+            animationId = requestAnimationFrame(updateTimer);
+        }
+
+        // 按钮点击事件
+        toggleBtn.addEventListener('click', function() {
+            if (!isRunning) {
+                // ========== 核心：点击开始 ==========
+                // 1. 刷新数字矩阵
+                renderMatrix();
+                // 2. 计时器清零 + 开始计时
+                isRunning = true;
+                startTime = Date.now();
+                timerElement.textContent = "0.0";
+                updateTimer();
+                toggleBtn.textContent = '停止';
+                toggleBtn.classList.add('stop');
+            } else {
+                // 点击 停止 → 暂停
+                isRunning = false;
+                cancelAnimationFrame(animationId);
+                toggleBtn.textContent = '开始';
+                toggleBtn.classList.remove('stop');
+            }
+        });
+    </script>
+</body>
+</html>
